@@ -59,9 +59,9 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
                                              help_text='Роль пользователя')
     user_reputation_score = models.PositiveIntegerField(default=0, blank=False, null=False,
                                                         help_text='Репутация пользователя')
-    user_avatar_url =       models.ImageField(blank=True,
+    user_avatar_url =       models.ImageField(blank=True, null=True,
                                               help_text='Аватар пользователя')
-    user_bio =              models.TextField(blank=True,
+    user_bio =              models.TextField(blank=True, null=True,
                                              help_text='Дополнительная информация о пользователе')
     user_is_blocked =       models.BooleanField(default=False, blank=False, null=False,
                                                 help_text='Отображает, заблокирован ли пользователь')
