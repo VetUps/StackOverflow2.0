@@ -4,27 +4,27 @@ from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, Permis
 import uuid
 
 class CustomUserManager(BaseUserManager):
-    def create_user(self, user_email, user_name, password, **extra_fields):
+    def create_user(self, email, username, password, **extra_fields):
         """
         Создание пользователя
-        :param user_email: почта пользователя
-        :param user_name: никнейм пользователя
+        :param email: почта пользователя
+        :param username: никнейм пользователя
         :param password: пароль пользователя
         :param extra_fields: дополнительные поля для создания пользователя
         :return: модель созданного пользователя
         """
-        if not user_email:
+        if not email:
             raise ValueError('The user must have an email address')
-        if not user_name:
+        if not username:
             raise ValueError('The user must have an username')
 
-        email = self.normalize_email(user_email)
-        user = self.model(user_email=user_email, user_name=user_name, **extra_fields)
+        email = self.normalize_email(email)
+        user = self.model(user_email=email, user_name=username, **extra_fields)
         user.set_password(password)
         user.save(using=self._db)
         return user
 
-    def create_superuser(self, user_email, user_name, password, **extra_fields):
+    def create_superuser(self, email, username, password, **extra_fields):
         """
         Создание суперпользователя с дополнительными правами
         """
@@ -37,23 +37,17 @@ class CustomUserManager(BaseUserManager):
         if extra_fields.get('is_superuser') is not True:
             raise ValueError('Superuser must have is_superuser=True.')
 
-        return self.create_user(user_email, user_name, password, **extra_fields)
+        return self.create_user(email, username, password, **extra_fields)
 
 
 class CustomUser(AbstractBaseUser, PermissionsMixin):
     """
     Кастомная модель данных пользователя
     """
-
-    USER_ROLE = 'user'
-    EXPERT_ROLE = 'expert'
-    ADMIN_ROLE = 'admin'
-
-    ROLE_CHOICES = {
-        USER_ROLE: 'User',
-        EXPERT_ROLE: 'Expert',
-        ADMIN_ROLE: 'Admin',
-    }
+    class Roles(models.TextChoices):
+        USER_ROLE = 'user', 'User'
+        EXPERT_ROLE = 'expert', 'Expert'
+        ADMIN_ROLE = 'admin', 'Admin'
 
     user_id =               models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, blank=False,
                                              help_text='Уникальный идентификатор пользователя')
@@ -61,7 +55,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
                                              help_text='Никнейм пользователя')
     user_email =            models.EmailField(max_length=255, unique=True, blank=False,
                                               help_text='Почта пользователя')
-    user_role =             models.CharField(choices=ROLE_CHOICES, default=USER_ROLE, max_length=15, blank=False,
+    user_role =             models.CharField(choices=Roles, default=Roles.USER_ROLE, max_length=15, blank=False,
                                              help_text='Роль пользователя')
     user_reputation_score = models.PositiveIntegerField(default=0, blank=False, null=False,
                                                         help_text='Репутация пользователя')
@@ -73,8 +67,8 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
                                                 help_text='Отображает, заблокирован ли пользователь')
     user_created_at =       models.DateTimeField(auto_now_add=True,
                                                  help_text='Дата регистрации пользователя')
-    is_staff = models.BooleanField(default=False)
-    is_active = models.BooleanField(default=True)
+    is_staff =              models.BooleanField(default=False)
+    is_active =             models.BooleanField(default=True)
 
     USERNAME_FIELD='user_email'
     REQUIRED_FIELDS = ['user_name']
@@ -123,3 +117,25 @@ class UserAchievement(models.Model):
         constraints = [
             models.UniqueConstraint(fields=['user', 'achievement'], name='unique_user_achievement')
         ]
+
+class ReputationTransaction(models.Model):
+    class TransactionReason(models.TextChoices):
+        BEST_SOLUTION = 'best_solution', 'Best solution'
+        SOLUTION_UPVOTED = 'solution_upvoted', 'Solution upvoted'
+        SOLUTION_DOWNVOTED = 'solution_downvoted', 'Solution downvoted'
+        QUESTION_UPVOTED = 'question_upvoted', 'Question upvoted'
+        ACHIEVEMENT_EARNED = 'achievement_earned', 'Achievement earned'
+        ADMIN_ADJUSTMENT = 'admin_adjustment', 'Admin adjustment'
+
+
+    reputation_transaction_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, blank=False,
+                                                 help_text='Уникальный идентификатор транзакции')
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, blank=False, null=False,
+                             help_text='Пользователь транзакции')
+    reputation_transaction_amount = models.IntegerField(blank=False, null=False,
+                                                        help_text='Количество снятой/добавленной репутации')
+    reputation_transaction_reason = models.CharField(max_length=128, blank=False, null=False, choices=TransactionReason.choices,
+                                                     help_text='Причина начисления/снятия репутации')
+
+    class Meta:
+        db_table = 'reputation_transactions'
