@@ -21,7 +21,9 @@ ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", default="*").split(",")
 
 
 # Приложения
-DJANGO_APPS = []
+DJANGO_APPS = [
+    'user',
+]
 
 THIRD_PARTY_APPS = [
     "rest_framework",
@@ -95,6 +97,7 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+AUTH_USER_MODEL = 'user.CustomUser'
 
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
