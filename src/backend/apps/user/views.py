@@ -1,16 +1,25 @@
 from django.contrib.auth import authenticate
 from rest_framework import viewsets, status
 from rest_framework.decorators import action, permission_classes
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework_simplejwt.exceptions import InvalidToken
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import CustomUser
 from .serializers import UserRegisterSerializer, UserLoginSerializer, UserProfileSerializer
 
 
 class UserViewSet(viewsets.ViewSet):
-    @permission_classes([AllowAny])
-    @action(detail=False, methods=['post'])
+    @staticmethod
+    def get_tokens_for_user(user):
+        refresh = RefreshToken.for_user(user)
+        return {
+            'refresh': str(refresh),
+            'access': str(refresh.access_token),
+        }
+
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
     def register(self, request):
         serializer = UserRegisterSerializer(data=request.data)
 
@@ -20,8 +29,7 @@ class UserViewSet(viewsets.ViewSet):
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @permission_classes([AllowAny])
-    @action(detail=False, methods=['post'])
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
     def login(self, request):
         serializer = UserLoginSerializer(data=request.data)
 
@@ -42,10 +50,23 @@ class UserViewSet(viewsets.ViewSet):
                     status=status.HTTP_403_FORBIDDEN
                 )
 
+            tokens = self.get_tokens_for_user(user)
             return Response({
-                'token': 'token',
+                'access': tokens['access'],
+                'refresh': tokens['refresh'],
                 'user': UserProfileSerializer(instance=user).data,
             },
                 status=status.HTTP_200_OK)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
+    def logout(self, request):
+        refresh = request.data.get('refresh')
+
+        try:
+            refresh = RefreshToken(refresh)
+            refresh.blacklist()
+            return Response(status=status.HTTP_200_OK)
+        except Exception:
+            return Response({'errors': 'Токен не передан/не существует/запрещён'}, status=status.HTTP_400_BAD_REQUEST)
