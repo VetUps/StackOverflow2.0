@@ -4,27 +4,27 @@ from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, Permis
 import uuid
 
 class CustomUserManager(BaseUserManager):
-    def create_user(self, email, username, password, **extra_fields):
+    def create_user(self, user_email, user_name, password, **extra_fields):
         """
         Создание пользователя
-        :param email: почта пользователя
-        :param username: никнейм пользователя
+        :param user_email: почта пользователя
+        :param user_name: никнейм пользователя
         :param password: пароль пользователя
         :param extra_fields: дополнительные поля для создания пользователя
         :return: модель созданного пользователя
         """
-        if not email:
-            raise ValueError('The user must have an email address')
-        if not username:
-            raise ValueError('The user must have an username')
+        if not user_email:
+            raise ValueError('Пользователь должен иметь почту')
+        if not user_name:
+            raise ValueError('Пользователь должен иметь никнейм')
 
-        email = self.normalize_email(email)
-        user = self.model(user_email=email, user_name=username, **extra_fields)
+        email = self.normalize_email(user_email)
+        user = self.model(user_email=email, user_name=user_name, **extra_fields)
         user.set_password(password)
         user.save(using=self._db)
         return user
 
-    def create_superuser(self, email, username, password, **extra_fields):
+    def create_superuser(self, user_email, user_name, password, **extra_fields):
         """
         Создание суперпользователя с дополнительными правами
         """
@@ -32,12 +32,12 @@ class CustomUserManager(BaseUserManager):
         extra_fields.setdefault('is_superuser', True)
         extra_fields.setdefault('is_active', True)
 
-        if extra_fields.get('is_staff') is not True:
+        if not extra_fields.get('is_staff'):
             raise ValueError('Superuser must have is_staff=True.')
-        if extra_fields.get('is_superuser') is not True:
+        if not extra_fields.get('is_superuser'):
             raise ValueError('Superuser must have is_superuser=True.')
 
-        return self.create_user(email, username, password, **extra_fields)
+        return self.create_user(user_email, user_name, password, **extra_fields)
 
 
 class CustomUser(AbstractBaseUser, PermissionsMixin):
@@ -63,12 +63,11 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
                                               help_text='Аватар пользователя')
     user_bio =              models.TextField(blank=True, null=True,
                                              help_text='Дополнительная информация о пользователе')
-    user_is_blocked =       models.BooleanField(default=False, blank=False, null=False,
-                                                help_text='Отображает, заблокирован ли пользователь')
     user_created_at =       models.DateTimeField(auto_now_add=True,
                                                  help_text='Дата регистрации пользователя')
     is_staff =              models.BooleanField(default=False)
-    is_active =             models.BooleanField(default=True)
+    is_active =             models.BooleanField(default=True,
+                                                help_text='Активирована ли учётная запись пользователя')
 
     USERNAME_FIELD='user_email'
     REQUIRED_FIELDS = ['user_name']
