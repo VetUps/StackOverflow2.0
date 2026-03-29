@@ -12,12 +12,10 @@ class QuestionListSerializer(serializers.ModelSerializer):
         model = Question
         fields = ['user', 'question_title', 'question_status', 'question_created_at', 'question_updated_at']
 
-class QuestionCreateSerializer(serializers.Serializer):
-    user = serializers.UUIDField(write_only=True)
-
+class QuestionUpdateCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Question
-        fields = ['user', 'question_title', 'question_body']
+        fields = ['question_title', 'question_body']
 
 class SolutionGetSerializer(serializers.ModelSerializer):
     class Meta:

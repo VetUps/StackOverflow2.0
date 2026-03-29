@@ -1,7 +1,7 @@
 import uuid
 
 from django.db import models
-from src.backend.apps.user.models import CustomUser
+from ..user.models import CustomUser
 
 
 class Question(models.Model):
@@ -18,7 +18,7 @@ class Question(models.Model):
                                            help_text='Краткое описание вопроса')
     question_body =       models.TextField(blank=False,
                                            help_text='Тело вопроса (сам текст)')
-    question_status =     models.CharField(choices=Status.choices, default=Status.OPEN_STATUS, blank=False,
+    question_status =     models.CharField(choices=Status.choices, default=Status.OPEN_STATUS, blank=False, max_length=20,
                                            help_text='Статус вопроса')
     question_created_at = models.DateTimeField(auto_now_add=True, blank=False,
                                                help_text='Дата создания вопроса')
