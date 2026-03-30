@@ -7,17 +7,18 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 
-from .models import Question, Solution
+from .models import Question, Solution, SolutionEdits
 from .serializers import (
     QuestionGetSerializer, QuestionListSerializer, QuestionUpdateCreateSerializer,
     SolutionListSerializer, SolutionCreateSerializer,
+    SolutionEditCreateSerializer, SolutionEditHistorySerializer
 )
 
-class QuestionViewSet(viewsets.GenericViewSet,
-                      mixins.ListModelMixin,
+class QuestionViewSet(mixins.ListModelMixin,
                       mixins.RetrieveModelMixin,
                       mixins.CreateModelMixin,
-                      mixins.UpdateModelMixin):
+                      mixins.UpdateModelMixin,
+                      viewsets.GenericViewSet):
     queryset = Question.objects.all()
     pagination_class = pagination.LimitOffsetPagination
 
@@ -48,9 +49,9 @@ class QuestionViewSet(viewsets.GenericViewSet,
     def perform_update(self, serializer):
         serializer.save(user=self.request.user)
 
-class SolutionViewSet(viewsets.GenericViewSet,
-                      mixins.ListModelMixin,
-                      mixins.CreateModelMixin,):
+class SolutionViewSet(mixins.ListModelMixin,
+                      mixins.CreateModelMixin,
+                      viewsets.GenericViewSet):
     pagination_class = pagination.LimitOffsetPagination
 
     solution_list_serializer = SolutionListSerializer
@@ -78,3 +79,44 @@ class SolutionViewSet(viewsets.GenericViewSet,
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
+
+class SolutionEditsViewSet(mixins.CreateModelMixin,
+                           viewsets.GenericViewSet):
+    pagination_class = None
+
+    solution_edit_create_serializer = SolutionEditCreateSerializer
+
+    def get_queryset(self):
+        return SolutionEdits.objects.all()
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return self.solution_edit_create_serializer
+        return self.serializer_class
+
+    def get_permissions(self):
+        if self.action in ['create']:
+            permission_classes = [IsAuthenticated]
+        else:
+            permission_classes = [AllowAny]
+
+        return [permission() for permission in permission_classes]
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+    @action(detail=False, methods=['get'], url_path='history/(?P<solution_id>[^/.]+)')
+    def history(self, request, solution_id):
+        try:
+            solution = Solution.objects.get(solution_id=solution_id)
+            solution_edits = (SolutionEdits.objects
+                              .filter(solution=solution, solution_edit_is_approved=True)
+                              .order_by('-solution_edit_edited_at'))
+
+            serializer = SolutionEditHistorySerializer(solution_edits, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Solution.DoesNotExist:
+            return Response(
+                {'error': 'Такого решения не существует'},
+                status=status.HTTP_404_NOT_FOUND,
+            )

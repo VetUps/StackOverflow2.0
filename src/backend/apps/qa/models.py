@@ -54,4 +54,26 @@ class Solution(models.Model):
         ]
 
     def __str__(self):
-        return self.solution_id
+        return f'{self.solution_id}'
+
+class SolutionEdits(models.Model):
+    solution_edit_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, blank=False,
+                                        help_text='Уникальный идентификатор изменения')
+    solution = models.ForeignKey(Solution, blank=False, on_delete=models.CASCADE,
+                                 help_text='Решение к которому относится изменение')
+    user = models.ForeignKey(CustomUser, blank=False, null=True, on_delete=models.SET_NULL,
+                             help_text='Автор изменений')
+    solution_edit_body_before = models.TextField(blank=False,
+                                                 help_text='Текст решения до правок')
+    solution_edit_body_after = models.TextField(blank=False,
+                                                help_text='Новый текст решения')
+    solution_edit_is_approved = models.BooleanField(default=False, blank=False,
+                                                    help_text='Была ли одобрена правка')
+    solution_edit_edited_at = models.DateTimeField(auto_now_add=True, blank=False,
+                                                   help_text='Дата и время правки')
+
+    class Meta:
+        db_table = 'solution_edits'
+
+    def __str__(self):
+        return f'{self.solution_edit_id}'
