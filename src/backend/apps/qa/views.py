@@ -5,13 +5,13 @@ from rest_framework import viewsets, status, mixins, pagination
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import extend_schema, OpenApiParameter
 
 from .models import Question, Solution, SolutionEdits
 from .serializers import (
     QuestionGetSerializer, QuestionListSerializer, QuestionUpdateCreateSerializer,
     SolutionListSerializer, SolutionCreateSerializer,
-    SolutionEditCreateSerializer, SolutionEditHistorySerializer
+    SolutionEditCreateSerializer, SolutionEditHistorySerializer,
 )
 
 class QuestionViewSet(mixins.ListModelMixin,
@@ -95,7 +95,7 @@ class SolutionEditsViewSet(mixins.CreateModelMixin,
         return self.serializer_class
 
     def get_permissions(self):
-        if self.action in ['create']:
+        if self.action in ['create', 'approve']:
             permission_classes = [IsAuthenticated]
         else:
             permission_classes = [AllowAny]
@@ -110,7 +110,7 @@ class SolutionEditsViewSet(mixins.CreateModelMixin,
         try:
             solution = Solution.objects.get(solution_id=solution_id)
             solution_edits = (SolutionEdits.objects
-                              .filter(solution=solution, solution_edit_is_approved=True)
+                              .filter(solution=solution, solution_edit_is_approved=False)
                               .order_by('-solution_edit_edited_at'))
 
             serializer = SolutionEditHistorySerializer(solution_edits, many=True)
@@ -118,5 +118,55 @@ class SolutionEditsViewSet(mixins.CreateModelMixin,
         except Solution.DoesNotExist:
             return Response(
                 {'error': 'Такого решения не существует'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+    @action(detail=False, methods=['post'], url_path='approve/(?P<solution_edit_id>[^/.]+)')
+    def approve(self, request, solution_edit_id):
+        try:
+            solution_edit = SolutionEdits.objects.get(
+                solution_edit_id=solution_edit_id
+            )
+
+            if solution_edit.solution.user != request.user:
+                return Response(
+                    {'error': 'Вы не можете одобрять правки для данного решения'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+            solution_edit.solution_edit_is_approved = True
+            solution_edit.user = request.user
+            solution_edit.save()
+
+            return Response({'status': 'approved'}, status=status.HTTP_200_OK)
+
+        except SolutionEdits.DoesNotExist:
+            return Response(
+                {'error': 'Правка не найдена'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+    @action(detail=False, methods=['post'], url_path='disapprove/(?P<solution_edit_id>[^/.]+)')
+    def disapprove(self, request, solution_edit_id):
+        try:
+            solution_edit = SolutionEdits.objects.get(
+                solution_edit_id=solution_edit_id
+            )
+
+            if solution_edit.solution.user != request.user:
+                return Response(
+                    {'error': 'Вы не можете отклонять правки для данного решения'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+            solution_edit.solution_edit_is_approved = False
+            solution_edit.user = request.user
+            solution_edit.save()
+
+            return Response({'status': 'disapproved'}, status=status.HTTP_200_OK)
+
+        except SolutionEdits.DoesNotExist:
+            return Response(
+                {'error': 'Правка не найдена'},
                 status=status.HTTP_404_NOT_FOUND,
             )

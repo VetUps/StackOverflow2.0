@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import Question, Solution, SolutionEdits
+from ..user.models import CustomUser
 
 
 class QuestionGetSerializer(serializers.ModelSerializer):
@@ -69,5 +70,4 @@ class SolutionEditCreateSerializer(serializers.ModelSerializer):
 class SolutionEditHistorySerializer(serializers.ModelSerializer):
     class Meta:
         model = SolutionEdits
-        fields = ['solution_id', 'user', 'solution_edit_body_before', 'solution_edit_body_after',
-                  'solution_edit_is_approved', 'solution_edit_edited_at']
+        fields = '__all__'
