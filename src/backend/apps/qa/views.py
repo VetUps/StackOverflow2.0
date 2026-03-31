@@ -7,13 +7,15 @@ from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 
-from .models import Question, Solution, SolutionEdits
+from .models import Question, Solution, SolutionEdits, Comment
 from .serializers import (
     QuestionGetSerializer, QuestionListSerializer, QuestionUpdateCreateSerializer,
     SolutionListSerializer, SolutionCreateSerializer,
     SolutionEditCreateSerializer, SolutionEditHistorySerializer,
+    CommentListSerializer, CommentCreateSerializer, CommentDetailSerializer,
 )
 from .services.solution_edits_service import SolutionEditService
+from ..user.models import CustomUser
 
 class QuestionViewSet(mixins.ListModelMixin,
                       mixins.RetrieveModelMixin,
@@ -166,3 +168,115 @@ class SolutionEditsViewSet(mixins.CreateModelMixin,
             {'approved': False},
             status=status.HTTP_200_OK
         )
+
+
+class CommentViewSet(mixins.ListModelMixin,
+                     mixins.CreateModelMixin,
+                     mixins.DestroyModelMixin,
+                     viewsets.GenericViewSet):
+    """
+    ViewSet для управления комментариями.
+
+    Endpoints:
+    - GET /comment/?target_type=question&target_id=<uuid> - список комментариев к цели
+    - POST /comment/ - создание комментария
+    - DELETE /comment/{id}/ - удаление комментария
+    """
+    pagination_class = pagination.PageNumberPagination
+
+    comment_list_serializer = CommentListSerializer
+    comment_create_serializer = CommentCreateSerializer
+    comment_detail_serializer = CommentDetailSerializer
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name='target_type',
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description='Тип цели комментария (например, "question" или "solution")',
+                required=True
+            ),
+            OpenApiParameter(
+                name='target_id',
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.QUERY,
+                description='UUID цели комментария',
+                required=True
+            ),
+            OpenApiParameter(
+                name='parent_id',
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.QUERY,
+                description='UUID родительского комментария (для ответов)',
+                required=False
+            ),
+        ]
+    )
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
+
+    @extend_schema(
+        request=CommentCreateSerializer
+    )
+    def create(self, request, *args, **kwargs):
+        return super().create(request, *args, **kwargs)
+
+    def get_queryset(self):
+        """Возвращает комментарии, отфильтрованные по target_type и object_id"""
+        from django.contrib.contenttypes.models import ContentType
+        from .models import Question, Solution
+
+        queryset = Comment.objects.all().order_by('created_at')
+
+        target_type = self.request.query_params.get('target_type')
+        target_id = self.request.query_params.get('target_id')
+        parent_id = self.request.query_params.get('parent_id')
+
+        if target_type and target_id:
+            # Получаем ContentType для указанного типа
+            if target_type == 'question':
+                content_type = ContentType.objects.get_for_model(Question)
+            elif target_type == 'solution':
+                content_type = ContentType.objects.get_for_model(Solution)
+            else:
+                return Comment.objects.none()
+
+            queryset = queryset.filter(content_type=content_type, object_id=target_id)
+
+        # Если указан parent_id, возвращаем только ответы на этот комментарий
+        if parent_id:
+            queryset = queryset.filter(parent_id=parent_id)
+        else:
+            # Если parent_id не указан, возвращаем только корневые комментарии
+            queryset = queryset.filter(parent__isnull=True)
+
+        return queryset
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return self.comment_list_serializer
+        if self.action == 'create':
+            return self.comment_create_serializer
+        if self.action == 'retrieve':
+            return self.comment_detail_serializer
+        return self.serializer_class
+
+    def get_permissions(self):
+        if self.action in ['create', 'destroy']:
+            permission_classes = [IsAuthenticated]
+        else:
+            permission_classes = [AllowAny]
+        return [permission() for permission in permission_classes]
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+    def perform_destroy(self, instance):
+        # Проверка прав на удаление (только автор или админ)
+        user = self.request.user
+        if user != instance.user and user.user_role != CustomUser.Roles.ADMIN_ROLE:
+            raise PermissionDenied('Вы не можете удалить этот комментарий')
+        
+        # Удаляем комментарий и все вложенные (каскад через on_delete=models.CASCADE)
+        instance.delete()

@@ -1,5 +1,7 @@
 import uuid
 
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
 from django.db import models
 from ..user.models import CustomUser
 
@@ -77,3 +79,36 @@ class SolutionEdits(models.Model):
 
     def __str__(self):
         return f'{self.solution_edit_id}'
+
+
+class Comment(models.Model):
+    comment_id =        models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, blank=False,
+                                        help_text='Уникальный идентификатор комментария')
+    user =              models.ForeignKey(CustomUser, blank=False, null=True, on_delete=models.CASCADE,
+                                          help_text='Автор комментария')
+    
+    content_type =      models.ForeignKey(ContentType, on_delete=models.CASCADE,
+                                          help_text='Тип контента (вопрос или решение)')
+    object_id =         models.UUIDField(help_text='ID объекта, к которому оставлен комментарий')
+    target =            GenericForeignKey('content_type', 'object_id')
+    
+    parent =            models.ForeignKey('self', blank=True, null=True, on_delete=models.SET_NULL,
+                                          help_text='Родительский комментарий (для вложенных комментариев)')
+    body =              models.TextField(blank=False,
+                                         help_text='Текст комментария')
+    created_at =        models.DateTimeField(auto_now_add=True, blank=False,
+                                             help_text='Дата создания комментария')
+
+    class Meta:
+        db_table = 'comments'
+        indexes = [
+            models.Index(fields=['content_type', 'object_id']),
+            models.Index(fields=['parent']),
+        ]
+
+    def __str__(self):
+        return f'Comment {self.comment_id} by {self.user.user_name if self.user else "Anonymous"}'
+    
+    @property
+    def target_type(self):
+        return self.content_type.model

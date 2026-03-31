@@ -1,5 +1,7 @@
+from django.contrib.contenttypes.models import ContentType
+from django.db.models import TextChoices
 from rest_framework import serializers
-from .models import Question, Solution, SolutionEdits
+from .models import Question, Solution, SolutionEdits, Comment
 from ..user.models import CustomUser
 
 
@@ -71,3 +73,107 @@ class SolutionEditHistorySerializer(serializers.ModelSerializer):
     class Meta:
         model = SolutionEdits
         fields = '__all__'
+
+
+class CommentListSerializer(serializers.ModelSerializer):
+    user_name = serializers.CharField(source='user.user_name', read_only=True)
+    user_avatar_url = serializers.ImageField(source='user.user_avatar_url', read_only=True)
+    parent_id = serializers.UUIDField(source='parent.comment_id', read_only=True)
+    target_id = serializers.UUIDField(source='object_id', read_only=True)
+
+    class Meta:
+        model = Comment
+        fields = ['comment_id', 'user', 'user_name', 'user_avatar_url', 'target_type',
+                  'target_id', 'parent_id', 'body', 'created_at']
+
+
+class CommentCreateSerializer(serializers.ModelSerializer):
+    class TargetType(TextChoices):
+        QUESTION = 'question', 'Question'
+        SOLUTION = 'solution', 'Solution'
+    
+    target_type = serializers.ChoiceField(choices=TargetType.choices)
+    target_id = serializers.UUIDField(write_only=True)
+    parent_id = serializers.UUIDField(required=False, allow_null=True)
+
+    class Meta:
+        model = Comment
+        fields = ['target_type', 'target_id', 'parent_id', 'body']
+
+    def validate(self, data):
+        target_type = data.get('target_type')
+        target_id = data.get('target_id')
+        parent_id = data.get('parent_id')
+
+        # Проверка существования цели
+        if target_type == self.TargetType.QUESTION:
+            from .models import Question
+            if not Question.objects.filter(question_id=target_id).exists():
+                raise serializers.ValidationError('Вопрос не найден')
+        elif target_type == self.TargetType.SOLUTION:
+            from .models import Solution
+            if not Solution.objects.filter(solution_id=target_id).exists():
+                raise serializers.ValidationError('Решение не найдено')
+
+        # Проверка родительского комментария
+        if parent_id:
+            try:
+                parent = Comment.objects.get(comment_id=parent_id)
+                # Родительский комментарий должен быть к той же цели
+                parent_target_type = 'question' if parent.content_type.model == 'question' else 'solution'
+                if parent_target_type != target_type or parent.object_id != target_id:
+                    raise serializers.ValidationError(
+                        'Родительский комментарий должен относиться к той же цели'
+                    )
+            except Comment.DoesNotExist:
+                raise serializers.ValidationError('Родительский комментарий не найден')
+
+        return data
+
+    def create(self, validated_data):
+        target_type = validated_data.pop('target_type')
+        target_id = validated_data.pop('target_id')
+        parent_id = validated_data.pop('parent_id', None)
+        # Удаляем user из validated_data, если он там есть
+        validated_data.pop('user', None)
+
+        # Получаем ContentType для указанного типа
+        if target_type == self.TargetType.QUESTION:
+            content_type = ContentType.objects.get_for_model(Question)
+        elif target_type == self.TargetType.SOLUTION:
+            content_type = ContentType.objects.get_for_model(Solution)
+        else:
+            raise serializers.ValidationError('Неверный тип цели')
+
+        # Устанавливаем content_type и object_id для GenericForeignKey
+        validated_data['content_type'] = content_type
+        validated_data['object_id'] = target_id
+
+        parent = None
+        if parent_id:
+            parent = Comment.objects.get(comment_id=parent_id)
+
+        comment = Comment.objects.create(
+            parent=parent,
+            user=self.context.get('request').user,
+            **validated_data
+        )
+        return comment
+
+
+class CommentDetailSerializer(serializers.ModelSerializer):
+    user_name = serializers.CharField(source='user.user_name', read_only=True)
+    user_avatar_url = serializers.ImageField(source='user.user_avatar_url', read_only=True)
+    parent_id = serializers.UUIDField(source='parent.comment_id', read_only=True)
+    target_id = serializers.UUIDField(source='object_id', read_only=True)
+    replies = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Comment
+        fields = ['comment_id', 'user', 'user_name', 'user_avatar_url', 'target_type',
+                  'target_id', 'parent_id', 'body', 'created_at', 'replies']
+
+    def get_replies(self, obj):
+        """Возвращает список ответов на комментарий"""
+        replies = Comment.objects.filter(parent=obj).order_by('created_at')
+        return CommentListSerializer(replies, many=True).data
