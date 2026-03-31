@@ -113,7 +113,18 @@ class SolutionEditsViewSet(mixins.CreateModelMixin,
         return [permission() for permission in permission_classes]
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        solution = serializer.validated_data['solution']
+        user = self.request.user
+        is_author = solution.user == user
+
+        serializer.save(
+            user=self.request.user,
+            solution_edit_is_approved=True if is_author else None
+        )
+
+        if is_author:
+            solution.solution_body = serializer.validated_data['solution_edit_body_after']
+            solution.save(update_fields=['solution_body', 'solution_updated_at'])
 
     @action(detail=False, methods=['get'], url_path='history/(?P<solution_id>[^/.]+)')
     def history(self, request, solution_id):

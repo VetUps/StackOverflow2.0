@@ -67,7 +67,7 @@ class SolutionEditService:
     @staticmethod
     def not_approved(solution_id, user):
         solution = SolutionService.get_solution(solution_id)
-        SolutionEditService._is_user_solution_author(solution, user)
+        SolutionEditService.is_user_solution_author(solution, user)
         solution_edits = (SolutionEdits.objects
                           .filter(solution=solution, solution_edit_is_approved__isnull=True)
                           .order_by('-solution_edit_edited_at'))
@@ -82,11 +82,11 @@ class SolutionEditService:
         :param user: пользователь, который совершает действие
         :return:
         """
-        SolutionEditService._is_user_solution_author(solution, user)
+        SolutionEditService.is_user_solution_author(solution, user)
         SolutionEditService._is_solution_edit_in_waiting_status(solution_edit)
 
     @staticmethod
-    def _is_user_solution_author(solution, user):
+    def is_user_solution_author(solution, user):
         """
         Проверяет права пользователя на смену статуса правки
         :param solution: Оригинальное решение
