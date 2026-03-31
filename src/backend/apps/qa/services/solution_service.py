@@ -11,9 +11,19 @@ class SolutionService:
         """
         try:
             solution = Solution.objects.get(
-                id=solution_id
+                solution_id=solution_id
             )
 
             return solution
         except Solution.DoesNotExist:
             raise NotFound('Такого решения не существует')
+
+    @staticmethod
+    def change_solution_body(solution, new_body):
+        """
+        Изменяет содержимое решения
+        :param solution: решение
+        :param new_body: новое содержимое
+        :return:
+        """
+        Solution.objects.filter(solution_id=solution.solution_id).update(solution_body=new_body)

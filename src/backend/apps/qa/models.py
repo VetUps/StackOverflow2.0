@@ -67,7 +67,7 @@ class SolutionEdits(models.Model):
                                                  help_text='Текст решения до правок')
     solution_edit_body_after = models.TextField(blank=False,
                                                 help_text='Новый текст решения')
-    solution_edit_is_approved = models.BooleanField(default=False, blank=False,
+    solution_edit_is_approved = models.BooleanField(blank=True, null=True,
                                                     help_text='Была ли одобрена правка')
     solution_edit_edited_at = models.DateTimeField(auto_now_add=True, blank=False,
                                                    help_text='Дата и время правки')

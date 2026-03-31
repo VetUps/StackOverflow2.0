@@ -1,8 +1,10 @@
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied
+from drf_spectacular.types import OpenApiTypes
 from rest_framework import viewsets, status, mixins, pagination
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 
 from .models import Question, Solution, SolutionEdits
@@ -19,7 +21,7 @@ class QuestionViewSet(mixins.ListModelMixin,
                       mixins.UpdateModelMixin,
                       viewsets.GenericViewSet):
     queryset = Question.objects.all()
-    pagination_class = pagination.LimitOffsetPagination
+    pagination_class = pagination.PageNumberPagination
 
     question_get_serializer = QuestionGetSerializer
     question_list_serializer = QuestionListSerializer
@@ -51,7 +53,7 @@ class QuestionViewSet(mixins.ListModelMixin,
 class SolutionViewSet(mixins.ListModelMixin,
                       mixins.CreateModelMixin,
                       viewsets.GenericViewSet):
-    pagination_class = pagination.LimitOffsetPagination
+    pagination_class = pagination.PageNumberPagination
 
     solution_list_serializer = SolutionListSerializer
     solution_create_serializer = SolutionCreateSerializer
@@ -79,10 +81,19 @@ class SolutionViewSet(mixins.ListModelMixin,
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                'question_id', OpenApiTypes.UUID,
+                      location='query', required=True, description='ID вопроса'
+            ),
+        ]
+    )
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
+
 class SolutionEditsViewSet(mixins.CreateModelMixin,
                            viewsets.GenericViewSet):
-    pagination_class = None
-
     solution_edit_create_serializer = SolutionEditCreateSerializer
 
     def get_queryset(self):
@@ -94,7 +105,7 @@ class SolutionEditsViewSet(mixins.CreateModelMixin,
         return self.serializer_class
 
     def get_permissions(self):
-        if self.action in ['create', 'approve', 'disapprove']:
+        if self.action in ['create', 'approve', 'disapprove', 'not_approved']:
             permission_classes = [IsAuthenticated]
         else:
             permission_classes = [AllowAny]
@@ -107,6 +118,17 @@ class SolutionEditsViewSet(mixins.CreateModelMixin,
     @action(detail=False, methods=['get'], url_path='history/(?P<solution_id>[^/.]+)')
     def history(self, request, solution_id):
         result = SolutionEditService.history(solution_id)
+        serializer = SolutionEditHistorySerializer(result, many=True)
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=False, methods=['get'], url_path='not_approved/(?P<solution_id>[^/.]+)')
+    def not_approved(self, request, solution_id):
+        user = request.user
+        result = SolutionEditService.not_approved(solution_id, user)
         serializer = SolutionEditHistorySerializer(result, many=True)
 
         return Response(
