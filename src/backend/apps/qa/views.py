@@ -147,7 +147,7 @@ class SolutionEditsViewSet(mixins.CreateModelMixin,
             status=status.HTTP_200_OK,
         )
 
-    @action(detail=False, methods=['post'], url_path='approve/(?P<solution_edit_id>[^/.]+)')
+    @action(detail=False, methods=['patch'], url_path='approve/(?P<solution_edit_id>[^/.]+)')
     def approve(self, request, solution_edit_id):
         user = request.user
         SolutionEditService.change_approve(solution_edit_id, True, user)
@@ -157,7 +157,7 @@ class SolutionEditsViewSet(mixins.CreateModelMixin,
             status=status.HTTP_200_OK
         )
 
-    @action(detail=False, methods=['post'], url_path='disapprove/(?P<solution_edit_id>[^/.]+)')
+    @action(detail=False, methods=['patch'], url_path='disapprove/(?P<solution_edit_id>[^/.]+)')
     def disapprove(self, request, solution_edit_id):
         user = request.user
         SolutionEditService.change_approve(solution_edit_id, False, user)
