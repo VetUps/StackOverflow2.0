@@ -92,7 +92,7 @@ class Comment(models.Model):
     object_id =         models.UUIDField(help_text='ID объекта, к которому оставлен комментарий')
     target =            GenericForeignKey('content_type', 'object_id')
     
-    parent =            models.ForeignKey('self', blank=True, null=True, on_delete=models.SET_NULL,
+    parent =            models.ForeignKey('self', blank=True, null=True, on_delete=models.CASCADE,
                                           help_text='Родительский комментарий (для вложенных комментариев)')
     body =              models.TextField(blank=False,
                                          help_text='Текст комментария')

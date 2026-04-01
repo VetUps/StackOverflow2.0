@@ -1,3 +1,4 @@
+from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
 from rest_framework import viewsets, status, mixins, pagination
 from rest_framework.decorators import action
@@ -235,6 +236,20 @@ class CommentViewSet(mixins.ListModelMixin,
         parent_id = self.request.query_params.get('parent_id')
 
         return CommentService.get_comments_for_target(target_type, target_id, parent_id)
+
+    def get_object(self):
+        """Для destroy действия получаем объект напрямую по ID"""
+        if self.action == 'destroy':
+            queryset = Comment.objects.all()
+        else:
+            queryset = self.get_queryset()
+
+        lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
+        filter_kwargs = {self.lookup_field: self.kwargs[lookup_url_kwarg]}
+        obj = get_object_or_404(queryset, **filter_kwargs)
+
+        self.check_object_permissions(self.request, obj)
+        return obj
 
     def get_serializer_class(self):
         if self.action == 'list':
