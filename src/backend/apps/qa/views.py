@@ -1,10 +1,8 @@
-from django.core.exceptions import ObjectDoesNotExist, PermissionDenied
 from drf_spectacular.types import OpenApiTypes
 from rest_framework import viewsets, status, mixins, pagination
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 
 from .models import Question, Solution, SolutionEdits, Comment
@@ -15,7 +13,7 @@ from .serializers import (
     CommentListSerializer, CommentCreateSerializer, CommentDetailSerializer,
 )
 from .services.solution_edits_service import SolutionEditService
-from ..user.models import CustomUser
+from .services.comment_service import CommentService
 
 class QuestionViewSet(mixins.ListModelMixin,
                       mixins.RetrieveModelMixin,
@@ -224,34 +222,11 @@ class CommentViewSet(mixins.ListModelMixin,
 
     def get_queryset(self):
         """Возвращает комментарии, отфильтрованные по target_type и object_id"""
-        from django.contrib.contenttypes.models import ContentType
-        from .models import Question, Solution
-
-        queryset = Comment.objects.all().order_by('created_at')
-
         target_type = self.request.query_params.get('target_type')
         target_id = self.request.query_params.get('target_id')
         parent_id = self.request.query_params.get('parent_id')
 
-        if target_type and target_id:
-            # Получаем ContentType для указанного типа
-            if target_type == 'question':
-                content_type = ContentType.objects.get_for_model(Question)
-            elif target_type == 'solution':
-                content_type = ContentType.objects.get_for_model(Solution)
-            else:
-                return Comment.objects.none()
-
-            queryset = queryset.filter(content_type=content_type, object_id=target_id)
-
-        # Если указан parent_id, возвращаем только ответы на этот комментарий
-        if parent_id:
-            queryset = queryset.filter(parent_id=parent_id)
-        else:
-            # Если parent_id не указан, возвращаем только корневые комментарии
-            queryset = queryset.filter(parent__isnull=True)
-
-        return queryset
+        return CommentService.get_comments_for_target(target_type, target_id, parent_id)
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -273,10 +248,7 @@ class CommentViewSet(mixins.ListModelMixin,
         serializer.save(user=self.request.user)
 
     def perform_destroy(self, instance):
-        # Проверка прав на удаление (только автор или админ)
         user = self.request.user
-        if user != instance.user and user.user_role != CustomUser.Roles.ADMIN_ROLE:
-            raise PermissionDenied('Вы не можете удалить этот комментарий')
-        
-        # Удаляем комментарий и все вложенные (каскад через on_delete=models.CASCADE)
-        instance.delete()
+        CommentService.validate_delete_permission(instance, user)
+
+        CommentService.delete_comment(instance)
