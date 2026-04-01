@@ -26,4 +26,5 @@ class SolutionService:
         :param new_body: новое содержимое
         :return:
         """
-        Solution.objects.filter(solution_id=solution.solution_id).update(solution_body=new_body)
+        solution.solution_body = new_body
+        solution.save(update_fields=['solution_body', 'solution_updated_at'])
