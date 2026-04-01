@@ -37,18 +37,26 @@ class QuestionViewSet(mixins.ListModelMixin,
         return self.serializer_class
 
     def get_permissions(self):
-        if self.action in ['create', 'update', 'partial_update']:
+        if self.action == 'create':
+            permission_classes = [IsAuthenticated]
+        elif self.action in ['update', 'partial_update']:
             permission_classes = [IsAuthenticated]
         else:
             permission_classes = [AllowAny]
 
         return [permission() for permission in permission_classes]
 
+    def get_object(self):
+        obj = super().get_object()
+        if self.action in ['update', 'partial_update'] and obj.user != self.request.user:
+            self.permission_denied(self.request)
+        return obj
+
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
     def perform_update(self, serializer):
-        serializer.save(user=self.request.user)
+        serializer.save()
 
 class SolutionViewSet(mixins.ListModelMixin,
                       mixins.CreateModelMixin,
