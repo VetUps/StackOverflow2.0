@@ -12,16 +12,17 @@ from .serializers import (
     SolutionListSerializer, SolutionCreateSerializer,
     SolutionEditCreateSerializer, SolutionEditHistorySerializer,
     CommentListSerializer, CommentCreateSerializer, CommentDetailSerializer,
+    VoteSerializer, VoteCreateSerializer,
 )
 from .services.solution_edits_service import SolutionEditService
 from .services.comment_service import CommentService
+from .services.vote_service import VoteService
 
 class QuestionViewSet(mixins.ListModelMixin,
                       mixins.RetrieveModelMixin,
                       mixins.CreateModelMixin,
                       mixins.UpdateModelMixin,
                       viewsets.GenericViewSet):
-    queryset = Question.objects.all()
     pagination_class = pagination.PageNumberPagination
 
     question_get_serializer = QuestionGetSerializer
@@ -47,6 +48,15 @@ class QuestionViewSet(mixins.ListModelMixin,
 
         return [permission() for permission in permission_classes]
 
+    def get_queryset(self):
+        queryset = Question.objects.all()
+
+        if self.action == 'retrieve':
+            user = self.request.user if hasattr(self.request, 'user') else None
+            queryset = VoteService.annotate_votes(queryset, Question, user)
+
+        return queryset
+
     def get_object(self):
         obj = super().get_object()
         if self.action in ['update', 'partial_update'] and obj.user != self.request.user:
@@ -69,8 +79,13 @@ class SolutionViewSet(mixins.ListModelMixin,
 
     def get_queryset(self):
         if self.action == 'list':
-            return Solution.objects.filter(question__question_id=self.request.query_params.get('question_id'))
-        return Solution.objects.all()
+            queryset = Solution.objects.filter(question__question_id=self.request.query_params.get('question_id'))
+            user = self.request.user if hasattr(self.request, 'user') else None
+            queryset = VoteService.annotate_votes(queryset, Solution, user)
+        else:
+            queryset = Solution.objects.all()
+
+        return queryset
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -275,3 +290,107 @@ class CommentViewSet(mixins.ListModelMixin,
         CommentService.validate_delete_permission(instance, user)
 
         CommentService.delete_comment(instance)
+
+
+class VoteViewSet(viewsets.ViewSet):
+    """
+    ViewSet для управления голосами
+
+    Endpoints:
+    - POST /vote/cast/ - поставить или изменить голос
+    - DELETE /vote/remove/ - снять голос
+    - GET /vote/stats/{target_type}/{target_id}/ - получить статистику голосов
+    - GET /vote/my/{target_type}/{target_id}/ - получить голос текущего пользователя
+    """
+
+    serializer_class = VoteCreateSerializer
+
+    def get_permissions(self):
+        if self.action in ['cast_vote', 'remove_vote']:
+            permission_classes = [IsAuthenticated]
+        else:
+            permission_classes = [AllowAny]
+        return [permission() for permission in permission_classes]
+
+    @extend_schema(
+        request=VoteCreateSerializer,
+        responses={200: VoteSerializer, 201: VoteSerializer}
+    )
+    @action(detail=False, methods=['post'], url_path='cast')
+    def cast_vote(self, request):
+        """
+        Поставить или изменить голос за объект.
+        Повторный запрос с тем же типом голоса не меняет состояние.
+        """
+        serializer = VoteCreateSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+
+        target_type = serializer.validated_data['target_type']
+        target_id = serializer.validated_data['target_id']
+        vote_type = serializer.validated_data['vote_type']
+
+        vote, created = VoteService.cast_vote(target_type, target_id, vote_type, request.user)
+        response_status = status.HTTP_201_CREATED if created else status.HTTP_200_OK
+        return Response(VoteSerializer(vote).data, status=response_status)
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter('target_type', str, 'query', required=True, description='Тип цели (question или solution)'),
+            OpenApiParameter('target_id', str, 'query', required=True, description='UUID цели'),
+        ],
+        responses={204: None}
+    )
+    @action(detail=False, methods=['delete'], url_path='remove')
+    def remove_vote(self, request):
+        """
+        Снять голос пользователя за объект.
+        """
+        target_type = request.query_params.get('target_type')
+        target_id = request.query_params.get('target_id')
+
+        if not target_type or not target_id:
+            return Response(
+                {'detail': 'Параметры target_type и target_id обязательны'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        VoteService.remove_vote(target_type, target_id, request.user)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter('target_type', str, 'path', required=True, description='Тип цели (question или solution)'),
+            OpenApiParameter('target_id', str, 'path', required=True, description='UUID цели'),
+        ],
+        responses={200: {'type': 'object', 'properties': {
+            'upvotes': {'type': 'integer'},
+            'downvotes': {'type': 'integer'},
+            'score': {'type': 'integer'}
+        }}}
+    )
+    @action(detail=False, methods=['get'], url_path='stats/(?P<target_type>[^/.]+)/(?P<target_id>[^/.]+)')
+    def get_stats(self, request, target_type, target_id):
+        """
+        Получить статистику голосов для объекта.
+        """
+        stats = VoteService.get_vote_stats(target_type, target_id)
+        return Response(stats, status=status.HTTP_200_OK)
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter('target_type', str, 'path', required=True, description='Тип цели (question или solution)'),
+            OpenApiParameter('target_id', str, 'path', required=True, description='UUID цели'),
+        ],
+        responses={200: {'type': 'object', 'properties': {'user_vote': {'type': 'string', 'enum': ['up', 'down', None]}}}}
+    )
+    @action(detail=False, methods=['get'], url_path='my/(?P<target_type>[^/.]+)/(?P<target_id>[^/.]+)')
+    def get_my_vote(self, request, target_type, target_id):
+        """
+        Получить голос текущего пользователя за объект.
+        """
+        user = request.user
+        if not user or not user.is_authenticated:
+            return Response({'user_vote': None}, status=status.HTTP_200_OK)
+
+        user_vote = VoteService.get_user_vote(target_type, target_id, user)
+        return Response({'user_vote': user_vote}, status=status.HTTP_200_OK)

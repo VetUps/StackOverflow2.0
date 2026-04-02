@@ -86,12 +86,12 @@ class Comment(models.Model):
                                         help_text='Уникальный идентификатор комментария')
     user =              models.ForeignKey(CustomUser, blank=False, null=True, on_delete=models.CASCADE,
                                           help_text='Автор комментария')
-    
+
     content_type =      models.ForeignKey(ContentType, on_delete=models.CASCADE,
                                           help_text='Тип контента (вопрос или решение)')
     object_id =         models.UUIDField(help_text='ID объекта, к которому оставлен комментарий')
     target =            GenericForeignKey('content_type', 'object_id')
-    
+
     parent =            models.ForeignKey('self', blank=True, null=True, on_delete=models.CASCADE,
                                           help_text='Родительский комментарий (для вложенных комментариев)')
     body =              models.TextField(blank=False,
@@ -108,7 +108,41 @@ class Comment(models.Model):
 
     def __str__(self):
         return f'Comment {self.comment_id} by {self.user.user_name if self.user else "Anonymous"}'
-    
+
     @property
     def target_type(self):
         return self.content_type.model
+
+
+class Vote(models.Model):
+    class VoteType(models.TextChoices):
+        UPVOTE = 'up', 'Upvote'
+        DOWNVOTE = 'down', 'Downvote'
+
+    vote_id =           models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, blank=False,
+                                         help_text='Уникальный идентификатор голоса')
+    user =              models.ForeignKey(CustomUser, blank=False, null=False, on_delete=models.CASCADE,
+                                          help_text='Пользователь, поставивший голос')
+    content_type =      models.ForeignKey(ContentType, on_delete=models.CASCADE,
+                                          help_text='Тип контента (вопрос или решение)')
+    object_id =         models.UUIDField(help_text='ID объекта, к которому поставлен голос')
+    target =            GenericForeignKey('content_type', 'object_id')
+    vote_type =         models.CharField(choices=VoteType.choices, blank=False, max_length=10,
+                                         help_text='Тип голоса (upvote или downvote)')
+    created_at =        models.DateTimeField(auto_now_add=True, blank=False,
+                                             help_text='Дата создания голоса')
+    updated_at =        models.DateTimeField(auto_now=True, blank=False,
+                                             help_text='Дата изменения голоса')
+
+    class Meta:
+        db_table = 'votes'
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'content_type', 'object_id'], name='unique_vote_user_target')
+        ]
+        indexes = [
+            models.Index(fields=['content_type', 'object_id']),
+            models.Index(fields=['user']),
+        ]
+
+    def __str__(self):
+        return f'{self.vote_type} by {self.user.user_name if self.user else "Anonymous"} on {self.target}'

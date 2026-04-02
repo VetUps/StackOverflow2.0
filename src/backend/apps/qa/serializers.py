@@ -1,14 +1,31 @@
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import TextChoices
 from rest_framework import serializers
-from .models import Question, Solution, SolutionEdits, Comment
-from ..user.models import CustomUser
+from .models import Question, Solution, SolutionEdits, Comment, Vote
+from .services.vote_service import VoteService
 
 
 class QuestionGetSerializer(serializers.ModelSerializer):
+    upvotes = serializers.SerializerMethodField()
+    downvotes = serializers.SerializerMethodField()
+    score = serializers.SerializerMethodField()
+    user_vote = serializers.SerializerMethodField()
+
     class Meta:
         model = Question
         fields = '__all__'
+
+    def get_upvotes(self, obj):
+        return getattr(obj, 'vote_upvotes', 0) or 0
+
+    def get_downvotes(self, obj):
+        return getattr(obj, 'vote_downvotes', 0) or 0
+
+    def get_score(self, obj):
+        return getattr(obj, 'vote_score', 0) or 0
+
+    def get_user_vote(self, obj):
+        return getattr(obj, 'user_vote_type', None)
 
 class QuestionListSerializer(serializers.ModelSerializer):
     class Meta:
@@ -22,11 +39,27 @@ class QuestionUpdateCreateSerializer(serializers.ModelSerializer):
 
 class SolutionListSerializer(serializers.ModelSerializer):
     question_id = serializers.UUIDField(write_only=True)
+    upvotes = serializers.SerializerMethodField()
+    downvotes = serializers.SerializerMethodField()
+    score = serializers.SerializerMethodField()
+    user_vote = serializers.SerializerMethodField()
 
     class Meta:
         model = Solution
         fields = ['solution_id', 'user', 'question_id', 'solution_body', 'solution_is_best',
-                  'solution_created_at', 'solution_updated_at']
+                  'solution_created_at', 'solution_updated_at', 'upvotes', 'downvotes', 'score', 'user_vote']
+
+    def get_upvotes(self, obj):
+        return getattr(obj, 'vote_upvotes', 0) or 0
+
+    def get_downvotes(self, obj):
+        return getattr(obj, 'vote_downvotes', 0) or 0
+
+    def get_score(self, obj):
+        return getattr(obj, 'vote_score', 0) or 0
+
+    def get_user_vote(self, obj):
+        return getattr(obj, 'user_vote_type', None)
 
 class SolutionCreateSerializer(serializers.ModelSerializer):
     class Meta:
@@ -107,11 +140,9 @@ class CommentCreateSerializer(serializers.ModelSerializer):
 
         # Проверка существования цели
         if target_type == self.TargetType.QUESTION:
-            from .models import Question
             if not Question.objects.filter(question_id=target_id).exists():
                 raise serializers.ValidationError('Вопрос не найден')
         elif target_type == self.TargetType.SOLUTION:
-            from .models import Solution
             if not Solution.objects.filter(solution_id=target_id).exists():
                 raise serializers.ValidationError('Решение не найдено')
 
@@ -177,3 +208,35 @@ class CommentDetailSerializer(serializers.ModelSerializer):
         """Возвращает список ответов на комментарий"""
         replies = Comment.objects.filter(parent=obj).order_by('created_at')
         return CommentListSerializer(replies, many=True).data
+
+
+class VoteSerializer(serializers.ModelSerializer):
+    target_type = serializers.SerializerMethodField()
+    target_id = serializers.UUIDField(source='object_id', read_only=True)
+
+    class Meta:
+        model = Vote
+        fields = ['vote_id', 'user', 'target_type', 'target_id', 'vote_type', 'created_at', 'updated_at']
+
+    def get_target_type(self, obj):
+        return obj.content_type.model
+
+
+class VoteCreateSerializer(serializers.Serializer):
+    target_type = serializers.ChoiceField(choices=[('question', 'Question'), ('solution', 'Solution')])
+    target_id = serializers.UUIDField()
+    vote_type = serializers.ChoiceField(choices=[('up', 'Upvote'), ('down', 'Downvote')])
+
+    def validate(self, data):
+        user = self.context.get('request').user
+        target_type = data.get('target_type')
+        target_id = data.get('target_id')
+
+        # Проверка существования цели
+        target_object = VoteService.get_target_object(target_type, target_id)
+
+        # Проверка: нельзя голосовать за свой контент
+        if target_object.user == user:
+            raise serializers.ValidationError('Нельзя голосовать за собственный контент')
+
+        return data
