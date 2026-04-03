@@ -5,6 +5,11 @@ from datetime import timedelta
 
 load_dotenv()
 
+VOTE_TYPE_CHOICES = [
+    ('up', 'Upvote'),
+    ('down', 'Downvote'),
+]
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -162,6 +167,9 @@ SPECTACULAR_SETTINGS = {
     'DESCRIPTION': 'API для проекта StackOverflow 2.0',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
+    'ENUM_NAME_OVERRIDES': {
+        'VoteTypeEnum': VOTE_TYPE_CHOICES,
+    },
     'EXTENSIONS': {
         'drf_spectacular.extensions': [
             'drf_spectacular.contrib.django_filters.DjangoFilterExtension',

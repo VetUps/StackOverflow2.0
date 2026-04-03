@@ -6,26 +6,14 @@ from .services.vote_service import VoteService
 
 
 class QuestionGetSerializer(serializers.ModelSerializer):
-    upvotes = serializers.SerializerMethodField()
-    downvotes = serializers.SerializerMethodField()
-    score = serializers.SerializerMethodField()
-    user_vote = serializers.SerializerMethodField()
+    upvotes = serializers.IntegerField(source='vote_upvotes', read_only=True)
+    downvotes = serializers.IntegerField(source='vote_downvotes', read_only=True)
+    score = serializers.IntegerField(source='vote_score', read_only=True)
+    user_vote = serializers.ChoiceField(source='user_vote_type', choices=Vote.VoteType.choices, read_only=True, allow_null=True)
 
     class Meta:
         model = Question
         fields = '__all__'
-
-    def get_upvotes(self, obj):
-        return getattr(obj, 'vote_upvotes', 0) or 0
-
-    def get_downvotes(self, obj):
-        return getattr(obj, 'vote_downvotes', 0) or 0
-
-    def get_score(self, obj):
-        return getattr(obj, 'vote_score', 0) or 0
-
-    def get_user_vote(self, obj):
-        return getattr(obj, 'user_vote_type', None)
 
 class QuestionListSerializer(serializers.ModelSerializer):
     class Meta:
@@ -39,27 +27,15 @@ class QuestionUpdateCreateSerializer(serializers.ModelSerializer):
 
 class SolutionListSerializer(serializers.ModelSerializer):
     question_id = serializers.UUIDField(write_only=True)
-    upvotes = serializers.SerializerMethodField()
-    downvotes = serializers.SerializerMethodField()
-    score = serializers.SerializerMethodField()
-    user_vote = serializers.SerializerMethodField()
+    upvotes = serializers.IntegerField(source='vote_upvotes', read_only=True)
+    downvotes = serializers.IntegerField(source='vote_downvotes', read_only=True)
+    score = serializers.IntegerField(source='vote_score', read_only=True)
+    user_vote = serializers.ChoiceField(source='user_vote_type', choices=Vote.VoteType.choices, read_only=True, allow_null=True)
 
     class Meta:
         model = Solution
         fields = ['solution_id', 'user', 'question_id', 'solution_body', 'solution_is_best',
                   'solution_created_at', 'solution_updated_at', 'upvotes', 'downvotes', 'score', 'user_vote']
-
-    def get_upvotes(self, obj):
-        return getattr(obj, 'vote_upvotes', 0) or 0
-
-    def get_downvotes(self, obj):
-        return getattr(obj, 'vote_downvotes', 0) or 0
-
-    def get_score(self, obj):
-        return getattr(obj, 'vote_score', 0) or 0
-
-    def get_user_vote(self, obj):
-        return getattr(obj, 'user_vote_type', None)
 
 class SolutionCreateSerializer(serializers.ModelSerializer):
     class Meta:
@@ -109,6 +85,7 @@ class SolutionEditHistorySerializer(serializers.ModelSerializer):
 
 
 class CommentListSerializer(serializers.ModelSerializer):
+    target_type = serializers.CharField(read_only=True)
     user_name = serializers.CharField(source='user.user_name', read_only=True)
     user_avatar_url = serializers.ImageField(source='user.user_avatar_url', read_only=True)
     parent_id = serializers.UUIDField(source='parent.comment_id', read_only=True)
@@ -193,6 +170,7 @@ class CommentCreateSerializer(serializers.ModelSerializer):
 
 
 class CommentDetailSerializer(serializers.ModelSerializer):
+    target_type = serializers.CharField(read_only=True)
     user_name = serializers.CharField(source='user.user_name', read_only=True)
     user_avatar_url = serializers.ImageField(source='user.user_avatar_url', read_only=True)
     parent_id = serializers.UUIDField(source='parent.comment_id', read_only=True)
@@ -211,15 +189,16 @@ class CommentDetailSerializer(serializers.ModelSerializer):
 
 
 class VoteSerializer(serializers.ModelSerializer):
-    target_type = serializers.SerializerMethodField()
+    target_type = serializers.CharField(source='content_type.model', read_only=True)
     target_id = serializers.UUIDField(source='object_id', read_only=True)
 
     class Meta:
         model = Vote
         fields = ['vote_id', 'user', 'target_type', 'target_id', 'vote_type', 'created_at', 'updated_at']
 
-    def get_target_type(self, obj):
-        return obj.content_type.model
+
+class SolutionEditApprovalSerializer(serializers.Serializer):
+    approved = serializers.BooleanField()
 
 
 class VoteCreateSerializer(serializers.Serializer):

@@ -12,7 +12,7 @@ from .serializers import (
     SolutionListSerializer, SolutionCreateSerializer,
     SolutionEditCreateSerializer, SolutionEditHistorySerializer,
     CommentListSerializer, CommentCreateSerializer, CommentDetailSerializer,
-    VoteSerializer, VoteCreateSerializer,
+    VoteSerializer, VoteCreateSerializer, SolutionEditApprovalSerializer,
 )
 from .services.solution_edits_service import SolutionEditService
 from .services.comment_service import CommentService
@@ -23,6 +23,8 @@ class QuestionViewSet(mixins.ListModelMixin,
                       mixins.CreateModelMixin,
                       mixins.UpdateModelMixin,
                       viewsets.GenericViewSet):
+    serializer_class = QuestionGetSerializer
+    lookup_field = 'question_id'
     pagination_class = pagination.PageNumberPagination
 
     question_get_serializer = QuestionGetSerializer
@@ -118,6 +120,7 @@ class SolutionViewSet(mixins.ListModelMixin,
 
 class SolutionEditsViewSet(mixins.CreateModelMixin,
                            viewsets.GenericViewSet):
+    serializer_class = SolutionEditHistorySerializer
     solution_edit_create_serializer = SolutionEditCreateSerializer
 
     def get_queryset(self):
@@ -151,6 +154,7 @@ class SolutionEditsViewSet(mixins.CreateModelMixin,
             solution.save(update_fields=['solution_body', 'solution_updated_at'])
 
     @action(detail=False, methods=['get'], url_path='history/(?P<solution_id>[^/.]+)')
+    @extend_schema(responses=SolutionEditHistorySerializer(many=True))
     def history(self, request, solution_id):
         result = SolutionEditService.history(solution_id)
         serializer = SolutionEditHistorySerializer(result, many=True)
@@ -161,6 +165,7 @@ class SolutionEditsViewSet(mixins.CreateModelMixin,
         )
 
     @action(detail=False, methods=['get'], url_path='not_approved/(?P<solution_id>[^/.]+)')
+    @extend_schema(responses=SolutionEditHistorySerializer(many=True))
     def not_approved(self, request, solution_id):
         user = request.user
         result = SolutionEditService.not_approved(solution_id, user)
@@ -172,6 +177,7 @@ class SolutionEditsViewSet(mixins.CreateModelMixin,
         )
 
     @action(detail=False, methods=['patch'], url_path='approve/(?P<solution_edit_id>[^/.]+)')
+    @extend_schema(responses=SolutionEditApprovalSerializer)
     def approve(self, request, solution_edit_id):
         user = request.user
         SolutionEditService.change_approve(solution_edit_id, True, user)
@@ -182,6 +188,7 @@ class SolutionEditsViewSet(mixins.CreateModelMixin,
         )
 
     @action(detail=False, methods=['patch'], url_path='disapprove/(?P<solution_edit_id>[^/.]+)')
+    @extend_schema(responses=SolutionEditApprovalSerializer)
     def disapprove(self, request, solution_edit_id):
         user = request.user
         SolutionEditService.change_approve(solution_edit_id, False, user)
@@ -204,6 +211,8 @@ class CommentViewSet(mixins.ListModelMixin,
     - POST /comment/ - создание комментария
     - DELETE /comment/{id}/ - удаление комментария
     """
+    serializer_class = CommentDetailSerializer
+    lookup_field = 'comment_id'
     pagination_class = pagination.PageNumberPagination
 
     comment_list_serializer = CommentListSerializer
