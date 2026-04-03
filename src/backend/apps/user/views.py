@@ -24,6 +24,8 @@ class UserViewSet(viewsets.GenericViewSet):
             return UserLoginSerializer
         if self.action == 'logout':
             return UserLogoutSerializer
+        if self.action == 'profile':
+            return UserProfileSerializer
         return self.serializer_class
 
     @extend_schema(
@@ -71,3 +73,12 @@ class UserViewSet(viewsets.GenericViewSet):
 
         UserService.logout_user(serializer.validated_data['refresh'])
         return Response(status=status.HTTP_200_OK)
+
+    @extend_schema(
+        responses={200: UserProfileSerializer}
+    )
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated], url_path='profile')
+    def profile(self, request):
+        user = UserService.get_user_profile(request.user)
+        serializer = self.get_serializer(instance=user)
+        return Response(serializer.data, status=status.HTTP_200_OK)

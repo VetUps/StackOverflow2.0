@@ -22,6 +22,10 @@ class UserService:
         }
 
     @staticmethod
+    def get_user_profile(user: CustomUser) -> CustomUser:
+        return user
+
+    @staticmethod
     def login_user(user_email: str, password: str) -> tuple[CustomUser, dict]:
         user = authenticate(username=user_email, password=password)
 
