@@ -1,9 +1,7 @@
-from django.contrib.auth import authenticate
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-from rest_framework_simplejwt.tokens import RefreshToken
 from drf_spectacular.utils import extend_schema
 
 from .serializers import (
@@ -13,6 +11,7 @@ from .serializers import (
     UserLoginResponseSerializer,
     UserLogoutSerializer,
 )
+from .services.user_service import UserService
 
 
 class UserViewSet(viewsets.GenericViewSet):
@@ -27,14 +26,6 @@ class UserViewSet(viewsets.GenericViewSet):
             return UserLogoutSerializer
         return self.serializer_class
 
-    @staticmethod
-    def get_tokens_for_user(user):
-        refresh = RefreshToken.for_user(user)
-        return {
-            'refresh': str(refresh),
-            'access': str(refresh.access_token),
-        }
-
     @extend_schema(
         request=UserRegisterSerializer,
         responses={201: UserRegisterSerializer}
@@ -42,12 +33,12 @@ class UserViewSet(viewsets.GenericViewSet):
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
     def register(self, request):
         serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        user = UserService.register_user(serializer.validated_data)
+        response_serializer = UserRegisterSerializer(instance=user)
 
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
 
     @extend_schema(
         request=UserLoginSerializer,
@@ -56,33 +47,18 @@ class UserViewSet(viewsets.GenericViewSet):
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
     def login(self, request):
         serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
-        if serializer.is_valid():
-            user = authenticate(
-                username=serializer.validated_data['user_email'],
-                password=serializer.validated_data['password']
-            )
+        user, tokens = UserService.login_user(
+            user_email=serializer.validated_data['user_email'],
+            password=serializer.validated_data['password']
+        )
 
-            if not user:
-                return Response(
-                    data={'errors': 'Неверные учётные данные'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            if not user.is_active:
-                return Response(
-                    data={'errors': "Аккаунт заблокирован"},
-                    status=status.HTTP_403_FORBIDDEN
-                )
-
-            tokens = self.get_tokens_for_user(user)
-            return Response({
-                'access': tokens['access'],
-                'refresh': tokens['refresh'],
-                'user': UserProfileSerializer(instance=user).data,
-            },
-                status=status.HTTP_200_OK)
-
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response({
+            'access': tokens['access'],
+            'refresh': tokens['refresh'],
+            'user': UserProfileSerializer(instance=user).data,
+        }, status=status.HTTP_200_OK)
 
     @extend_schema(
         request=UserLogoutSerializer,
@@ -91,15 +67,7 @@ class UserViewSet(viewsets.GenericViewSet):
     @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
     def logout(self, request):
         serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-        refresh = serializer.validated_data['refresh']
-
-        try:
-            refresh = RefreshToken(refresh)
-            refresh.blacklist()
-            return Response(status=status.HTTP_200_OK)
-        except Exception:
-            return Response({'errors': 'Токен не передан/не существует/запрещён'}, status=status.HTTP_400_BAD_REQUEST)
+        UserService.logout_user(serializer.validated_data['refresh'])
+        return Response(status=status.HTTP_200_OK)

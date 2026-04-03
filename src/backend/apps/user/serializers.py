@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import CustomUser
+from .services.user_service import UserService
 
 class UserRegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=6, max_length=20, required=True)
@@ -21,9 +22,7 @@ class UserRegisterSerializer(serializers.ModelSerializer):
         return data
 
     def create(self, validated_data):
-        validated_data.pop('password_confirm')
-
-        return CustomUser.objects.create_user(**validated_data)
+        return UserService.register_user(validated_data)
 
 class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
