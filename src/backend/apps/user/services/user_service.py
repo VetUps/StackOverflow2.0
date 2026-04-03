@@ -1,5 +1,6 @@
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.contrib.auth import authenticate
-from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
@@ -24,6 +25,13 @@ class UserService:
     @staticmethod
     def get_user_profile(user: CustomUser) -> CustomUser:
         return user
+
+    @staticmethod
+    def get_public_user_profile(user_id: str) -> CustomUser:
+        try:
+            return CustomUser.objects.get(user_id=user_id, is_active=True)
+        except (CustomUser.DoesNotExist, DjangoValidationError, ValueError):
+            raise NotFound('Пользователь не найден')
 
     @staticmethod
     def login_user(user_email: str, password: str) -> tuple[CustomUser, dict]:

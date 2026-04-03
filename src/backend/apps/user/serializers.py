@@ -29,6 +29,20 @@ class UserProfileSerializer(serializers.ModelSerializer):
         model = CustomUser
         fields = ('user_name', 'user_email', 'user_reputation_score', 'user_avatar_url', 'user_bio', 'user_created_at')
 
+
+class PublicUserProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomUser
+        fields = (
+            'user_id',
+            'user_name',
+            'user_role',
+            'user_reputation_score',
+            'user_avatar_url',
+            'user_bio',
+            'user_created_at',
+        )
+
 class UserLoginSerializer(serializers.Serializer):
     user_email = serializers.CharField(max_length=255, required=True)
     password = serializers.CharField(write_only=True, min_length=6, max_length=20, required=True)

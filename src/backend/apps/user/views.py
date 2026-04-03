@@ -8,6 +8,7 @@ from .serializers import (
     UserRegisterSerializer,
     UserLoginSerializer,
     UserProfileSerializer,
+    PublicUserProfileSerializer,
     UserLoginResponseSerializer,
     UserLogoutSerializer,
 )
@@ -15,6 +16,7 @@ from .services.user_service import UserService
 
 
 class UserViewSet(viewsets.GenericViewSet):
+    lookup_field = 'user_id'
     serializer_class = UserRegisterSerializer
 
     def get_serializer_class(self):
@@ -26,6 +28,8 @@ class UserViewSet(viewsets.GenericViewSet):
             return UserLogoutSerializer
         if self.action == 'profile':
             return UserProfileSerializer
+        if self.action == 'public_profile':
+            return PublicUserProfileSerializer
         return self.serializer_class
 
     @extend_schema(
@@ -80,5 +84,14 @@ class UserViewSet(viewsets.GenericViewSet):
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated], url_path='profile')
     def profile(self, request):
         user = UserService.get_user_profile(request.user)
+        serializer = self.get_serializer(instance=user)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @extend_schema(
+        responses={200: PublicUserProfileSerializer}
+    )
+    @action(detail=True, methods=['get'], permission_classes=[AllowAny], url_path='public-profile')
+    def public_profile(self, request, user_id=None):
+        user = UserService.get_public_user_profile(user_id)
         serializer = self.get_serializer(instance=user)
         return Response(serializer.data, status=status.HTTP_200_OK)
