@@ -43,3 +43,12 @@ class UserLoginSerializer(serializers.Serializer):
         if not value.strip():
             raise serializers.ValidationError('Пароль обязателен')
         return value
+
+class UserLoginResponseSerializer(serializers.Serializer):
+    access = serializers.CharField()
+    refresh = serializers.CharField()
+    user = UserProfileSerializer()
+
+
+class UserLogoutSerializer(serializers.Serializer):
+    refresh = serializers.CharField()

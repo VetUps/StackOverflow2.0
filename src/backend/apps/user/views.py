@@ -4,11 +4,29 @@ from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
+from drf_spectacular.utils import extend_schema
 
-from .serializers import UserRegisterSerializer, UserLoginSerializer, UserProfileSerializer
+from .serializers import (
+    UserRegisterSerializer,
+    UserLoginSerializer,
+    UserProfileSerializer,
+    UserLoginResponseSerializer,
+    UserLogoutSerializer,
+)
 
 
-class UserViewSet(viewsets.ViewSet):
+class UserViewSet(viewsets.GenericViewSet):
+    serializer_class = UserRegisterSerializer
+
+    def get_serializer_class(self):
+        if self.action == 'register':
+            return UserRegisterSerializer
+        if self.action == 'login':
+            return UserLoginSerializer
+        if self.action == 'logout':
+            return UserLogoutSerializer
+        return self.serializer_class
+
     @staticmethod
     def get_tokens_for_user(user):
         refresh = RefreshToken.for_user(user)
@@ -17,9 +35,13 @@ class UserViewSet(viewsets.ViewSet):
             'access': str(refresh.access_token),
         }
 
+    @extend_schema(
+        request=UserRegisterSerializer,
+        responses={201: UserRegisterSerializer}
+    )
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
     def register(self, request):
-        serializer = UserRegisterSerializer(data=request.data)
+        serializer = self.get_serializer(data=request.data)
 
         if serializer.is_valid():
             serializer.save()
@@ -27,9 +49,13 @@ class UserViewSet(viewsets.ViewSet):
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    @extend_schema(
+        request=UserLoginSerializer,
+        responses={200: UserLoginResponseSerializer}
+    )
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
     def login(self, request):
-        serializer = UserLoginSerializer(data=request.data)
+        serializer = self.get_serializer(data=request.data)
 
         if serializer.is_valid():
             user = authenticate(
@@ -58,9 +84,18 @@ class UserViewSet(viewsets.ViewSet):
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    @extend_schema(
+        request=UserLogoutSerializer,
+        responses={200: None}
+    )
     @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
     def logout(self, request):
-        refresh = request.data.get('refresh')
+        serializer = self.get_serializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        refresh = serializer.validated_data['refresh']
 
         try:
             refresh = RefreshToken(refresh)
