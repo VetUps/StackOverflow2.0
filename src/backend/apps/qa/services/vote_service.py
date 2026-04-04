@@ -1,10 +1,13 @@
+from __future__ import annotations
+
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db.models import Count, OuterRef, Subquery, CharField, F, IntegerField, Value
+from django.db.models import Count, OuterRef, Subquery, CharField, F, IntegerField, Value, QuerySet
 from django.db.models.functions import Coalesce
 from rest_framework.exceptions import PermissionDenied, ValidationError, NotFound
 
 from ..models import Vote, Question, Solution
+from ...user.models import CustomUser
 
 
 class VoteService:
@@ -13,7 +16,7 @@ class VoteService:
     """
 
     @staticmethod
-    def get_target_object(target_type: str, target_id: str):
+    def get_target_object(target_type: str, target_id: str) -> Question | Solution:
         """
         Возвращает объект цели по типу и ID
         :param target_type: Тип цели ('question' или 'solution')
@@ -35,7 +38,11 @@ class VoteService:
             raise ValidationError('Невалидный формат ID')
 
     @staticmethod
-    def annotate_votes(queryset, target_model, user=None):
+    def annotate_votes(
+        queryset: QuerySet[Question] | QuerySet[Solution],
+        target_model: type[Question] | type[Solution],
+        user: CustomUser | None = None,
+    ) -> QuerySet[Question] | QuerySet[Solution]:
         """
         Аннотирует queryset статистикой голосов и голосом пользователя.
         :param queryset: Исходный queryset (Question или Solution)
@@ -80,7 +87,7 @@ class VoteService:
         return queryset
 
     @staticmethod
-    def get_vote_stats_fast(obj, target_type: str):
+    def get_vote_stats_fast(obj: Question | Solution, target_type: str) -> dict[str, int]:
         """
         Быстрое получение статистики из аннотированного объекта.
         :param obj: Аннотированный объект Question или Solution
@@ -94,7 +101,7 @@ class VoteService:
         }
 
     @staticmethod
-    def get_user_vote_fast(obj):
+    def get_user_vote_fast(obj: Question | Solution) -> str | None:
         """
         Быстрое получение голоса пользователя из аннотированного объекта.
         :param obj: Аннотированный объект Question или Solution
@@ -103,7 +110,7 @@ class VoteService:
         return getattr(obj, 'user_vote_type', None)
 
     @staticmethod
-    def validate_vote_permission(target_object, user):
+    def validate_vote_permission(target_object: Question | Solution, user: CustomUser) -> None:
         """
         Проверяет, что пользователь не голосует за собственный контент
         :param target_object: Объект вопроса или решения
@@ -114,7 +121,7 @@ class VoteService:
             raise PermissionDenied('Нельзя голосовать за собственный контент')
 
     @staticmethod
-    def get_content_type(target_type: str):
+    def get_content_type(target_type: str) -> ContentType:
         """
         Возвращает ContentType для указанного типа цели
         :param target_type: Тип цели ('question' или 'solution')
@@ -128,7 +135,7 @@ class VoteService:
             raise ValidationError('Неверный тип цели')
 
     @staticmethod
-    def cast_vote(target_type: str, target_id: str, vote_type: str, user):
+    def cast_vote(target_type: str, target_id: str, vote_type: str, user: CustomUser) -> tuple[Vote, bool]:
         """
         Поставить или изменить голос за объект.
         :param target_type: Тип цели ('question' или 'solution')
@@ -169,7 +176,7 @@ class VoteService:
         return vote, True
 
     @staticmethod
-    def remove_vote(target_type: str, target_id: str, user):
+    def remove_vote(target_type: str, target_id: str, user: CustomUser) -> None:
         """
         Удалить голос пользователя за объект
         :param target_type: Тип цели ('question' или 'solution')
@@ -187,7 +194,7 @@ class VoteService:
         ).delete()
 
     @staticmethod
-    def get_vote_stats(target_type: str, target_id: str):
+    def get_vote_stats(target_type: str, target_id: str) -> dict[str, int]:
         """
         Возвращает статистику голосов для объекта
         :param target_type: Тип цели ('question' или 'solution')
@@ -216,7 +223,7 @@ class VoteService:
         }
 
     @staticmethod
-    def get_user_vote(target_type: str, target_id: str, user):
+    def get_user_vote(target_type: str, target_id: str, user: CustomUser | None) -> str | None:
         """
         Возвращает голос текущего пользователя за объект
         :param target_type: Тип цели ('question' или 'solution')

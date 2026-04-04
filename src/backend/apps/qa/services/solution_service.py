@@ -3,7 +3,7 @@ from ..models import Solution
 
 class SolutionService:
     @staticmethod
-    def get_solution(solution_id):
+    def get_solution(solution_id: str) -> Solution:
         """
         Возвращает решение по его ID
         :param solution_id: ID решения
@@ -19,7 +19,7 @@ class SolutionService:
             raise NotFound('Такого решения не существует')
 
     @staticmethod
-    def change_solution_body(solution, new_body):
+    def change_solution_body(solution: Solution, new_body: str) -> None:
         """
         Изменяет содержимое решения
         :param solution: решение

@@ -1,13 +1,15 @@
 from django.db import transaction
+from django.db.models import QuerySet
 from django.db.models import Q
 from rest_framework.exceptions import PermissionDenied, NotFound, ValidationError
 
-from ..models import SolutionEdits
+from ..models import Solution, SolutionEdits
+from ...user.models import CustomUser
 from .solution_service import SolutionService
 
 class SolutionEditService:
     @staticmethod
-    def get_solution_edit(solution_edit_id):
+    def get_solution_edit(solution_edit_id: str) -> SolutionEdits:
         """
         Возвращает правку по её ID
         :param solution_edit_id: ID правки
@@ -24,7 +26,7 @@ class SolutionEditService:
 
     @staticmethod
     @transaction.atomic
-    def change_approve(solution_edit_id, is_approved: bool, user):
+    def change_approve(solution_edit_id: str, is_approved: bool, user: CustomUser) -> None:
         """
         Разрешает/запрещает правку
         :param solution_edit_id: ID правки
@@ -56,7 +58,7 @@ class SolutionEditService:
         solution_edit.save()
 
     @staticmethod
-    def history(solution_id):
+    def history(solution_id: str) -> QuerySet[SolutionEdits]:
         solution = SolutionService.get_solution(solution_id)
         solution_edits = (SolutionEdits.objects
                           .filter(solution=solution, solution_edit_is_approved=True)
@@ -65,7 +67,7 @@ class SolutionEditService:
         return solution_edits
 
     @staticmethod
-    def not_approved(solution_id, user):
+    def not_approved(solution_id: str, user: CustomUser) -> QuerySet[SolutionEdits]:
         solution = SolutionService.get_solution(solution_id)
         SolutionEditService.is_user_solution_author(solution, user)
         solution_edits = (SolutionEdits.objects
@@ -75,7 +77,11 @@ class SolutionEditService:
         return solution_edits
 
     @staticmethod
-    def _validate_change_approve(solution, solution_edit, user):
+    def _validate_change_approve(
+        solution: Solution,
+        solution_edit: SolutionEdits,
+        user: CustomUser,
+    ) -> None:
         """
         Запускает все валидации для процесса смены статуса правки
         :param solution: Оригинальное решение
@@ -86,7 +92,7 @@ class SolutionEditService:
         SolutionEditService._is_solution_edit_in_waiting_status(solution_edit)
 
     @staticmethod
-    def is_user_solution_author(solution, user):
+    def is_user_solution_author(solution: Solution, user: CustomUser) -> bool:
         """
         Проверяет права пользователя на смену статуса правки
         :param solution: Оригинальное решение
@@ -98,6 +104,6 @@ class SolutionEditService:
         return True
 
     @staticmethod
-    def _is_solution_edit_in_waiting_status(solution_edit):
+    def _is_solution_edit_in_waiting_status(solution_edit: SolutionEdits) -> None:
         if solution_edit.solution_edit_is_approved is not None:
             raise ValidationError('Правка уже была одобрена/отклонена')

@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from django.contrib.contenttypes.models import ContentType
+from django.db.models import QuerySet
 from rest_framework.exceptions import PermissionDenied, NotFound
 
 from ..models import Comment, Question, Solution
@@ -7,7 +10,7 @@ from ...user.models import CustomUser
 
 class CommentService:
     @staticmethod
-    def get_comment(comment_id):
+    def get_comment(comment_id: str) -> Comment:
         """
         Возвращает комментарий по его ID
         :param comment_id: ID комментария
@@ -20,7 +23,11 @@ class CommentService:
             raise NotFound('Такого комментария не существует')
 
     @staticmethod
-    def get_comments_for_target(target_type: str, target_id: str, parent_id: str = None):
+    def get_comments_for_target(
+        target_type: str,
+        target_id: str,
+        parent_id: str | None = None,
+    ) -> QuerySet[Comment]:
         """
         Возвращает комментарии для указанной цели (вопрос или решение)
         :param target_type: Тип цели ('question' или 'solution')
@@ -50,7 +57,7 @@ class CommentService:
         return queryset
 
     @staticmethod
-    def validate_delete_permission(comment, user):
+    def validate_delete_permission(comment: Comment, user: CustomUser) -> bool:
         """
         Проверяет права пользователя на удаление комментария
         :param comment: Комментарий
@@ -64,7 +71,7 @@ class CommentService:
         return True
 
     @staticmethod
-    def delete_comment(comment):
+    def delete_comment(comment: Comment) -> None:
         """
         Удаляет комментарий и все вложенные комментарии
         :param comment: Комментарий для удаления
