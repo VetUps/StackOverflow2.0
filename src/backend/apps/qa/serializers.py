@@ -184,7 +184,9 @@ class CommentDetailSerializer(serializers.ModelSerializer):
 
     def get_replies(self, obj):
         """Возвращает список ответов на комментарий"""
-        replies = Comment.objects.filter(parent=obj).order_by('created_at')
+        replies = getattr(obj, 'prefetched_replies', None)
+        if replies is None:
+            replies = Comment.objects.filter(parent=obj).select_related('user', 'content_type').order_by('created_at')
         return CommentListSerializer(replies, many=True).data
 
 

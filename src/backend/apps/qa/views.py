@@ -1,3 +1,4 @@
+from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
 from rest_framework import viewsets, status, mixins, pagination
@@ -51,10 +52,10 @@ class QuestionViewSet(mixins.ListModelMixin,
         return [permission() for permission in permission_classes]
 
     def get_queryset(self):
-        queryset = Question.objects.all()
+        queryset = Question.objects.select_related('user')
 
         if self.action == 'retrieve':
-            user = self.request.user if hasattr(self.request, 'user') else None
+            user = self.request.user
             queryset = VoteService.annotate_votes(queryset, Question, user)
 
         return queryset
@@ -80,12 +81,14 @@ class SolutionViewSet(mixins.ListModelMixin,
     solution_create_serializer = SolutionCreateSerializer
 
     def get_queryset(self):
+        base_queryset = Solution.objects.select_related('user', 'question')
+        
         if self.action == 'list':
-            queryset = Solution.objects.filter(question__question_id=self.request.query_params.get('question_id'))
-            user = self.request.user if hasattr(self.request, 'user') else None
+            queryset = base_queryset.filter(question__question_id=self.request.query_params.get('question_id'))
+            user = self.request.user
             queryset = VoteService.annotate_votes(queryset, Solution, user)
         else:
-            queryset = Solution.objects.all()
+            queryset = base_queryset
 
         return queryset
 
@@ -124,7 +127,7 @@ class SolutionEditsViewSet(mixins.CreateModelMixin,
     solution_edit_create_serializer = SolutionEditCreateSerializer
 
     def get_queryset(self):
-        return SolutionEdits.objects.all()
+        return SolutionEdits.objects.select_related('solution', 'user')
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -254,12 +257,23 @@ class CommentViewSet(mixins.ListModelMixin,
         return super().create(request, *args, **kwargs)
 
     def get_queryset(self):
-        """Возвращает комментарии, отфильтрованные по target_type и object_id"""
         target_type = self.request.query_params.get('target_type')
         target_id = self.request.query_params.get('target_id')
         parent_id = self.request.query_params.get('parent_id')
 
-        return CommentService.get_comments_for_target(target_type, target_id, parent_id)
+        base_queryset = CommentService.get_comments_for_target(target_type, target_id, parent_id)
+        base_queryset = base_queryset.select_related('user', 'parent', 'content_type')
+
+        # Предзагрузка ответов для CommentDetailSerializer.get_replies()
+        if self.action in ['list', 'retrieve']:
+            replies_prefetch = Prefetch(
+                'comment_set',
+                queryset=Comment.objects.select_related('user', 'content_type').order_by('created_at'),
+                to_attr='prefetched_replies'
+            )
+            base_queryset = base_queryset.prefetch_related(replies_prefetch)
+
+        return base_queryset
 
     def get_object(self):
         """Для destroy действия получаем объект напрямую по ID"""
